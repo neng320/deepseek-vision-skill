@@ -5,7 +5,7 @@
 ## 特性
 
 - **自动路由**：按优先级依次尝试多个视觉服务，失败自动切换到下一个（网络错误 / HTTP 4xx/5xx / 空响应）。
-- **多服务支持**：已内置 grok-4.5（中转）、mimo-v2.5-free（免费）、step-3.7-flash（官方，原生多模态）三个 provider，可自由增删。
+- **多服务支持**：已内置 mimo-v2.5-free（免费）、step-3.7-flash（官方，原生多模态）、agnes-2.5-flash（永久免费多模态）三个 provider，可自由增删。
 - **完整识别能力**：图像描述、OCR 文字提取、UI/截图理解、图表解读、多图对比、验证码识别。
 - **OpenAI 兼容**：所有 provider 均为 `/chat/completions` 协议，脚本零依赖（仅标准库）。
 - **零冗余编码**：多张图片只 base64 编码一次，多 provider 复用。
@@ -31,7 +31,7 @@ deepseek-vision-skill/
 ```bash
 export MIMO_VISION_API_KEY="sk-xxx"        # 作用于所有需要 key 的 provider
 export MIMO_VISION_ENDPOINT="https://..."  # 可选：覆盖端点
-export MIMO_VISION_MODEL="grok-4.5"        # 可选：覆盖模型
+export MIMO_VISION_MODEL="step-3.7-flash"     # 可选：覆盖模型
 ```
 
 ### 2. 调用
@@ -58,9 +58,11 @@ python scripts/vision.py shot.png --model step-3.7-flash --api-key sk-xxx --endp
 
 | priority | name | model | endpoint | 说明 |
 |---|---|---|---|---|
-| 1 | grok | grok-4.5 | pcph.asia/v1 | 高质量（中转，key 可能失效） |
-| 2 | mimo-free | mimo-v2.5-free | opencode.ai/zen/v1 | 免费免 key |
-| 3 | step | step-3.7-flash | api.stepfun.com/step_plan/v1 | 官方稳定兜底 |
+| 1 | mimo-free | mimo-v2.5-free | opencode.ai/zen/v1 | 免费免 key，开箱即用 |
+| 2 | step | step-3.7-flash | api.stepfun.com/step_plan/v1 | 官方稳定，需自配 key |
+| 3 | agnes | agnes-2.5-flash | apihub.agnes-ai.com/v1 | 永久免费多模态，需自配 key |
+
+默认路由全部使用免费/官方服务，无任何中转依赖。需要 key 的服务通过环境变量 `MIMO_VISION_API_KEY` 注入。
 
 成功后 stderr 打印 `[via xxx / model]` 标识命中的服务，stdout 保持纯净文本。
 

@@ -1,11 +1,11 @@
 ---
-name: mimo-vision
-description: Provide vision to non-vision models (e.g. deepseek) by calling the Xiaomi MiMo V2.5 multimodal chat-completions API. Use when the user provides or references an image, screenshot, photo, scan, chart, UI capture, or image URL and the current model cannot see it — including describing image contents, OCR/extracting visible text, reading error screenshots, understanding UI layout, comparing multiple images, interpreting charts/diagrams, and answering questions about visual content (图片、截图、照片、OCR、UI、图表、验证码). Invoke scripts/vision.py with local image paths or URLs; the script prints the vision model's text answer, or raw JSON with --json.
+name: deepseek-vision-skill
+description: Provide vision to non-vision models (e.g. deepseek) by calling multimodal vision APIs with automatic provider failover (mimo-v2.5-free / step-3.7-flash / agnes-2.5-flash). Use when the user provides or references an image, screenshot, photo, scan, chart, UI capture, or image URL and the current model cannot see it — including describing image contents, OCR/extracting visible text, reading error screenshots, understanding UI layout, comparing multiple images, interpreting charts/diagrams, and answering questions about visual content (图片、截图、照片、OCR、UI、图表、验证码). Invoke scripts/vision.py with local image paths or URLs; the script prints the vision model's text answer, or raw JSON with --json.
 ---
 
-# MiMo Vision
+# DeepSeek Vision Skill（视觉识别）
 
-当主模型没有视觉能力（如 DeepSeek）、用户提供图片或要求理解图片内容时，自动把图片交给视觉模型分析（默认 grok-4.5 优先，自动故障转移），并把视觉模型输出转述给用户。
+当主模型没有视觉能力（如 DeepSeek）、用户提供图片或要求理解图片内容时，自动把图片交给视觉模型分析（默认 mimo 免费优先，自动故障转移），并把视觉模型输出转述给用户。
 
 ## 何时使用
 
@@ -21,19 +21,19 @@ description: Provide vision to non-vision models (e.g. deepseek) by calling the 
 
 | 优先级 | 名称 | 模型 | 端点 | 说明 |
 |---|---|---|---|---|
-| 1 | grok | grok-4.5 | pcph.asia/v1（中转） | 高质量，key 临时，可能失效 |
-| 2 | mimo-free | mimo-v2.5-free | opencode.ai/zen/v1 | 免费免 key，日常主力（grok 失效的首选落点） |
-| 3 | agnes | agnes-2.5-flash | apihub.agnes-ai.com/v1 | 永久免费，原生多模态（4K 图像），兜底 |
-| 4 | step | step-3.7-flash | api.stepfun.com/step_plan/v1（官方） | 原生多模态（图片+视频），最稳兜底 |
+| 1 | mimo-free | mimo-v2.5-free | opencode.ai/zen/v1 | 免费免 key，开箱即用，日常主力 |
+| 2 | step | step-3.7-flash | api.stepfun.com/step_plan/v1（官方） | 原生多模态（图片+视频），需自配 key |
+| 3 | agnes | agnes-2.5-flash | apihub.agnes-ai.com/v1 | 永久免费，原生多模态（4K 图像），需自配 key |
 
-- 成功后 stderr 打印 `[via grok / grok-4.5]` 标识实际命中的服务，stdout 保持纯净文本。
+- 成功后 stderr 打印 `[via mimo-free / mimo-v2.5-free]` 标识实际命中的服务，stdout 保持纯净文本。
 - 全部失败时列出每个 provider 的失败原因并退出码非 0。
 - 图片只编码一次，多个 provider 复用，无额外开销。
 - 临时强制指定某个服务：命令行 `--model/--endpoint/--api-key` 或环境变量 `MIMO_VISION_MODEL/ENDPOINT/API_KEY`（此时不走路由）。
+- 需要 key 的 provider（step/agnes），密钥通过环境变量 `MIMO_VISION_API_KEY` 提供，或自行填入本地 config.json（请勿提交含密钥的 config.json 到仓库）。
 
 ## 配置凭据
 
-- 默认配置已写入 `config.json`，开箱即用（grok 带 key，mimo 免 key）。
+- 默认配置已写入 `config.json`（不含任何密钥），mimo 免费端点开箱即用。
 - 新增/替换服务：在 `providers` 数组加一项 `{name, model, endpoint, api_key(可省略), priority}`。
 - 保留旧格式兼容：顶层 `model` / `endpoint` / `api_key` 字段仍可用（无 providers 数组时生效）。
 
@@ -42,7 +42,7 @@ description: Provide vision to non-vision models (e.g. deepseek) by calling the 
 ## 调用方式
 
 ```bash
-python "C:\Users\Administrator\.workbuddy\skills\mimo-vision\scripts\vision.py" <图片路径或URL> -q "问题"
+python scripts/vision.py <图片路径或URL> -q "问题"
 ```
 
 常用参数：
@@ -50,7 +50,7 @@ python "C:\Users\Administrator\.workbuddy\skills\mimo-vision\scripts\vision.py" 
 - 多张图：`vision.py a.png b.png -q "对比这两张图"`
 - 纯 OCR：`vision.py shot.png -q "把图中所有文字原样提取出来"`
 - 输出原始 JSON：加 `--json`（含 usage token 统计、provider 标识）
-- 强制指定服务：`--model grok-4.5 --api-key sk-xxx --endpoint https://...`
+- 强制指定服务：`--model step-3.7-flash --api-key sk-xxx --endpoint https://...`
 - 需要代理时：`--proxy http://127.0.0.1:7890`（或环境变量 `MIMO_VISION_PROXY`）
 
 ## 结果处理

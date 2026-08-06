@@ -1,19 +1,12 @@
-# MiMo Vision API Notes
+# Vision Skill API Notes
 
 ## 端点与凭据
 
 - **默认端点（免费，无需 key）**：`https://opencode.ai/zen/v1/chat/completions`，模型 `mimo-v2.5-free`（200k 上下文，原生全模态，OpenAI 兼容）。
-- **可选官方端点（付费，需 key）**：`https://api.xiaomimimo.com/v1/chat/completions`，模型 `mimo-v2.5` / `mimo-v2.5-pro`。
-- **临时高质量备选（用户提供的中转，key 可能随时失效）**：`https://pcph.asia/v1/chat/completions`，模型 `grok-4.5`（xAI，视觉细节识别更强，实测能读出 GUM logo 等小字；按量计费）。
-  - 切换命令（key 用环境变量，不落盘）：
-    ```bash
-    MIMO_VISION_API_KEY="sk-xxx" MIMO_VISION_ENDPOINT="https://pcph.asia/v1/chat/completions" MIMO_VISION_MODEL="grok-4.5" python scripts/vision.py 图片 -q "问题"
-    ```
-  - 或命令行参数：`--api-key sk-xxx --endpoint https://pcph.asia/v1/chat/completions --model grok-4.5`
+- **官方端点（需 key）**：`https://api.stepfun.com/step_plan/v1/chat/completions`，模型 `step-3.7-flash`（阶跃星辰，198B 稀疏 MoE，原生图片+视频理解，256K 上下文）。
 - **永久免费多模态（agnes）**：`https://apihub.agnes-ai.com/v1/chat/completions`，模型 `agnes-2.5-flash`（官方承诺全模态永久免费：文本/4K 图像/短视频，API 无 Token 计费、无每日上限；文本默认 RPM 30）。
   - ⚠️ 注意区分：`agnes-2.5-pro-alpha` 是**付费**模型（输入 $0.45/M、输出 $0.90/M），勿误用；`agnes-image-2.1-flash` 走 `/v1/images/generations` 生图端点，非视觉理解。
   - agnes 响应含 `reasoning_content`（思考过程）+ `content`（最终答案），与 deepseek 推理格式一致，脚本只打印 content。
-  - 用户提供的第二个 agnes key 实测 401 无效，勿用。
 - 读取顺序：命令行参数 > 环境变量 > `config.json`。
 - 环境变量：`MIMO_VISION_API_KEY`、`MIMO_VISION_ENDPOINT`、`MIMO_VISION_MODEL`、`MIMO_VISION_TIMEOUT`、`MIMO_VISION_MAX_TOKENS`、`MIMO_VISION_TEMPERATURE`、`MIMO_VISION_PROXY`。
 

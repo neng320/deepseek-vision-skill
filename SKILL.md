@@ -1,9 +1,9 @@
 ---
-name: vision-skill
+name: deepseek-vision-skill
 description: Provide vision to non-vision models (e.g. deepseek) by calling multimodal vision APIs with automatic provider failover (grok-4.5 / mimo-v2.5-free / step-3.7-flash). Use when the user provides or references an image, screenshot, photo, scan, chart, UI capture, or image URL and the current model cannot see it — including describing image contents, OCR/extracting visible text, reading error screenshots, understanding UI layout, comparing multiple images, interpreting charts/diagrams, and answering questions about visual content (图片、截图、照片、OCR、UI、图表、验证码). Invoke scripts/vision.py with local image paths or URLs; the script prints the vision model's text answer, or raw JSON with --json.
 ---
 
-# Vision Skill（视觉识别）
+# DeepSeek Vision Skill（视觉识别）
 
 当主模型没有视觉能力（如 DeepSeek）、用户提供图片或要求理解图片内容时，自动把图片交给视觉模型分析（默认 grok-4.5 优先，自动故障转移），并把视觉模型输出转述给用户。
 

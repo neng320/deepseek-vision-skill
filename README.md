@@ -1,4 +1,4 @@
-# Vision Skill — 视觉识别技能
+# DeepSeek Vision Skill — 视觉识别技能
 
 为无视觉能力的 AI 主模型（如 DeepSeek）提供图像识别能力：把图片交给多模态视觉模型分析，自动故障转移，保证识别链路永不中断。
 
@@ -13,7 +13,7 @@
 ## 目录结构
 
 ```
-vision-skill/
+deepseek-vision-skill/
 ├── SKILL.md          # 技能触发与使用说明
 ├── config.json       # provider 路由配置（不含任何密钥）
 ├── scripts/

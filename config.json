@@ -7,15 +7,15 @@
       "priority": 1
     },
     {
-      "name": "agnes",
-      "model": "agnes-2.5-flash",
-      "endpoint": "https://apihub.agnes-ai.com/v1/chat/completions",
-      "priority": 2
-    },
-    {
       "name": "mimo-free",
       "model": "mimo-v2.5-free",
       "endpoint": "https://opencode.ai/zen/v1/chat/completions",
+      "priority": 2
+    },
+    {
+      "name": "agnes",
+      "model": "agnes-2.5-flash",
+      "endpoint": "https://apihub.agnes-ai.com/v1/chat/completions",
       "priority": 3
     },
     {

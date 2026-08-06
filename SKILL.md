@@ -22,8 +22,8 @@ description: Provide vision to non-vision models (e.g. deepseek) by calling the 
 | 优先级 | 名称 | 模型 | 端点 | 说明 |
 |---|---|---|---|---|
 | 1 | grok | grok-4.5 | pcph.asia/v1（中转） | 高质量，key 临时，可能失效 |
-| 2 | agnes | agnes-2.5-flash | apihub.agnes-ai.com/v1 | **永久免费**，原生多模态（4K 图像），OpenAI 协议 |
-| 3 | mimo-free | mimo-v2.5-free | opencode.ai/zen/v1 | 免费免 key，日常主力 |
+| 2 | mimo-free | mimo-v2.5-free | opencode.ai/zen/v1 | 免费免 key，日常主力（grok 失效的首选落点） |
+| 3 | agnes | agnes-2.5-flash | apihub.agnes-ai.com/v1 | 永久免费，原生多模态（4K 图像），兜底 |
 | 4 | step | step-3.7-flash | api.stepfun.com/step_plan/v1（官方） | 原生多模态（图片+视频），最稳兜底 |
 
 - 成功后 stderr 打印 `[via grok / grok-4.5]` 标识实际命中的服务，stdout 保持纯净文本。

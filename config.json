@@ -1,0 +1,25 @@
+{
+  "providers": [
+    {
+      "name": "grok",
+      "model": "grok-4.5",
+      "endpoint": "https://pcph.asia/v1/chat/completions",
+      "priority": 1
+    },
+    {
+      "name": "mimo-free",
+      "model": "mimo-v2.5-free",
+      "endpoint": "https://opencode.ai/zen/v1/chat/completions",
+      "priority": 2
+    },
+    {
+      "name": "step",
+      "model": "step-3.7-flash",
+      "endpoint": "https://api.stepfun.com/step_plan/v1/chat/completions",
+      "priority": 3
+    }
+  ],
+  "timeout": 120,
+  "max_tokens": 2048,
+  "temperature": 0.7
+}

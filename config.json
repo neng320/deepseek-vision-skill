@@ -21,5 +21,6 @@
   ],
   "timeout": 120,
   "max_tokens": 2048,
-  "temperature": 0.7
+  "temperature": 0.7,
+  "max_pixel": 1536
 }

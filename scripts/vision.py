@@ -20,9 +20,16 @@ import json
 import mimetypes
 import os
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = SKILL_ROOT / "config.json"
@@ -36,6 +43,8 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 MAX_IMAGE_BYTES = 15 * 1024 * 1024  # 15 MB
+DEFAULT_MAX_PIXEL = 1536  # 长边超过则自动压缩（mimo 等模型对大图会失明）
+_TMP_FILES = []  # 压缩产生的临时文件，main 结束时清理
 
 
 class VisionError(Exception):
@@ -57,7 +66,40 @@ def env_or_config(config, key, env_name, default=None):
     return os.environ.get(env_name) or config.get(key, default)
 
 
-def image_to_url(value):
+def maybe_resize(path_str, max_pixel):
+    """长边超过 max_pixel 时用 Pillow 压缩到临时文件。
+
+    Returns (file_to_read, tmp_path_to_cleanup)。无 Pillow 或压缩失败时
+    返回原文件，仅 stderr 提示，不中断。
+    """
+    if not HAS_PIL:
+        return path_str, None
+    try:
+        with Image.open(path_str) as im:
+            w, h = im.size
+            if max(w, h) <= max_pixel:
+                return path_str, None
+            im.thumbnail((max_pixel, max_pixel))
+            fmt = (im.format or "JPEG").upper()
+            if fmt == "PNG":
+                tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False).name
+                im.save(tmp, "PNG")
+            else:
+                tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False).name
+                rgb = im.convert("RGB") if im.mode != "RGB" else im
+                rgb.save(tmp, "JPEG", quality=90)
+            _TMP_FILES.append(tmp)
+            print(
+                f"[mimo-vision] image resized {w}x{h} -> {im.size[0]}x{im.size[1]}",
+                file=sys.stderr,
+            )
+            return tmp, tmp
+    except Exception as exc:
+        print(f"[mimo-vision] resize failed, use original: {exc}", file=sys.stderr)
+        return path_str, None
+
+
+def image_to_url(value, max_pixel=None, no_resize=False):
     """Return an OpenAI-compatible content part for one image input."""
     if value.startswith(("http://", "https://")):
         return {"type": "image_url", "image_url": {"url": value}}
@@ -75,16 +117,19 @@ def image_to_url(value):
             file=sys.stderr,
         )
         sys.exit(1)
-    mime, _ = mimetypes.guess_type(path.name)
+    read_path = path
+    if max_pixel and not no_resize:
+        read_path, _ = maybe_resize(str(path), max_pixel)
+    mime, _ = mimetypes.guess_type(str(read_path))
     if not mime or not mime.startswith("image/"):
         mime = "image/png"
-    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    b64 = base64.b64encode(Path(read_path).read_bytes()).decode("ascii")
     return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
 
 
-def image_to_content_parts(images):
+def image_to_content_parts(images, max_pixel=None, no_resize=False):
     """Encode all images once; the result is reused across providers."""
-    return [image_to_url(img) for img in images]
+    return [image_to_url(img, max_pixel=max_pixel, no_resize=no_resize) for img in images]
 
 
 def build_providers(config, args, env_override):
@@ -224,6 +269,11 @@ def parse_args():
         default=None,
         help="explicit proxy URL (e.g. http://127.0.0.1:7890)",
     )
+    parser.add_argument(
+        "--no-resize",
+        action="store_true",
+        help="disable auto-resize of large images",
+    )
     return parser.parse_args()
 
 
@@ -254,43 +304,53 @@ def main():
         )
 
     providers = build_providers(config, args, env_override)
-    content_parts = image_to_content_parts(args.images)  # 编码一次，多 provider 复用
+    max_pixel = int(env_or_config(config, "max_pixel", "MIMO_VISION_MAX_PIXEL", DEFAULT_MAX_PIXEL))
+    content_parts = image_to_content_parts(
+        args.images, max_pixel=max_pixel, no_resize=args.no_resize
+    )  # 编码一次，多 provider 复用
     proxy = args.proxy or env_or_config(config, "proxy", "MIMO_VISION_PROXY")
 
     failures = []
-    for p in providers:
-        payload = build_payload(content_parts, args.question, p["model"], max_tokens, temperature)
-        try:
-            data = send_request(payload, p["endpoint"], p["api_key"], timeout, proxy)
-        except VisionError as exc:
-            failures.append(f"{p['name']} ({p['model']}): {exc}")
-            continue
-        try:
-            text = extract_text(data)
-        except VisionError as exc:
-            failures.append(f"{p['name']} ({p['model']}): {exc}")
-            continue
-        if not text:
-            failures.append(
-                f"{p['name']} ({p['model']}): empty response (max_tokens 可能太小，只生成了思考过程)"
-            )
-            continue
+    try:
+        for p in providers:
+            payload = build_payload(content_parts, args.question, p["model"], max_tokens, temperature)
+            try:
+                data = send_request(payload, p["endpoint"], p["api_key"], timeout, proxy)
+            except VisionError as exc:
+                failures.append(f"{p['name']} ({p['model']}): {exc}")
+                continue
+            try:
+                text = extract_text(data)
+            except VisionError as exc:
+                failures.append(f"{p['name']} ({p['model']}): {exc}")
+                continue
+            if not text:
+                failures.append(
+                    f"{p['name']} ({p['model']}): empty response (max_tokens 可能太小，只生成了思考过程)"
+                )
+                continue
 
-        # 成功：provider 信息走 stderr，不污染 stdout 文本
-        print(f"[via {p['name']} / {p['model']}]", file=sys.stderr)
-        if args.json:
-            out = dict(data)
-            out["provider"] = p["name"]
-            out["model"] = p["model"]
-            print(json.dumps(out, ensure_ascii=False, indent=2))
-        else:
-            print(text)
-        return
+            # 成功：provider 信息走 stderr，不污染 stdout 文本
+            print(f"[via {p['name']} / {p['model']}]", file=sys.stderr)
+            if args.json:
+                out = dict(data)
+                out["provider"] = p["name"]
+                out["model"] = p["model"]
+                print(json.dumps(out, ensure_ascii=False, indent=2))
+            else:
+                print(text)
+            return
 
-    print("[mimo-vision] all providers failed:", file=sys.stderr)
-    for f in failures:
-        print(f"  - {f}", file=sys.stderr)
-    sys.exit(1)
+        print("[mimo-vision] all providers failed:", file=sys.stderr)
+        for f in failures:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        for tmp in _TMP_FILES:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

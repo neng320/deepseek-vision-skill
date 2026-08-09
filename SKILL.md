@@ -22,8 +22,8 @@ description: Provide vision to non-vision models (e.g. deepseek) by calling mult
 | 优先级 | 名称 | 模型 | 端点 | 说明 |
 |---|---|---|---|---|
 | 1 | mimo-free | mimo-v2.5-free | opencode.ai/zen/v1 | 免费免 key，开箱即用，日常主力 |
-| 2 | step | step-3.7-flash | api.stepfun.com/step_plan/v1（官方） | 原生多模态（图片+视频），需自配 key |
-| 3 | agnes | agnes-2.5-flash | apihub.agnes-ai.com/v1 | 永久免费，原生多模态（4K 图像），需自配 key |
+| 2 | agnes | agnes-2.5-flash | apihub.agnes-ai.com/v1 | 永久免费，原生多模态（4K 图像），需自配 key |
+| 3 | step | step-3.7-flash | api.stepfun.com/step_plan/v1（官方） | 原生多模态（图片+视频），需自配 key，兜底（并发较低） |
 
 - 成功后 stderr 打印 `[via mimo-free / mimo-v2.5-free]` 标识实际命中的服务，stdout 保持纯净文本。
 - 全部失败时列出每个 provider 的失败原因并退出码非 0。

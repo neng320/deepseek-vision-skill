@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *.skill
 config.local.json
+.venv/

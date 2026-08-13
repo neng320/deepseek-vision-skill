@@ -21,9 +21,16 @@ import mimetypes
 import os
 import sys
 import tempfile
+import types
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 try:
     from PIL import Image
@@ -57,8 +64,7 @@ def load_config():
         try:
             config = json.loads(DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            print(f"[mimo-vision] broken config.json: {exc}", file=sys.stderr)
-            sys.exit(1)
+            raise VisionError(f"broken config.json: {exc}") from exc
     return config
 
 
@@ -105,18 +111,14 @@ def image_to_url(value, max_pixel=None, no_resize=False):
         return {"type": "image_url", "image_url": {"url": value}}
     path = Path(value)
     if not path.exists():
-        print(f"[mimo-vision] image not found: {value}", file=sys.stderr)
-        sys.exit(1)
+        raise VisionError(f"image not found: {value}")
     size = path.stat().st_size
     if size <= 0:
-        print(f"[mimo-vision] empty image file: {value}", file=sys.stderr)
-        sys.exit(1)
+        raise VisionError(f"empty image file: {value}")
     if size > MAX_IMAGE_BYTES:
-        print(
-            f"[mimo-vision] image too large ({size} bytes, max {MAX_IMAGE_BYTES}): {value}",
-            file=sys.stderr,
+        raise VisionError(
+            f"image too large ({size} bytes, max {MAX_IMAGE_BYTES}): {value}"
         )
-        sys.exit(1)
     read_path = path
     if max_pixel and not no_resize:
         read_path, _ = maybe_resize(str(path), max_pixel)
@@ -277,8 +279,18 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def analyze(images, question, max_tokens=None, temperature=None, timeout=None,
+            proxy=None, no_resize=False):
+    """Library entry point: run the provider-failover chain over `images`.
+
+    Mirrors main() without touching argv / sys.exit, so other processes
+    (e.g. the mimo-vision MCP server) can import and call this directly.
+
+    Returns {"text": str, "provider": str, "model": str, "data": dict} on
+    success ("data" is the raw API response, mostly for --json use).
+    Raises VisionError with a human-readable message on bad input or when
+    every provider fails.
+    """
     config = load_config()
 
     env_override = {}
@@ -290,32 +302,34 @@ def main():
         if os.environ.get(env_name):
             env_override[key] = os.environ[env_name]
 
-    timeout = args.timeout or int(
+    eff_timeout = timeout if timeout is not None else int(
         env_or_config(config, "timeout", "MIMO_VISION_TIMEOUT", 120)
     )
-    max_tokens = args.max_tokens or int(
+    eff_max_tokens = max_tokens if max_tokens is not None else int(
         env_or_config(config, "max_tokens", "MIMO_VISION_MAX_TOKENS", 2048)
     )
-    if args.temperature is not None:
-        temperature = args.temperature
-    else:
-        temperature = float(
+    eff_temperature = (
+        temperature if temperature is not None else float(
             env_or_config(config, "temperature", "MIMO_VISION_TEMPERATURE", 0.7)
         )
+    )
 
-    providers = build_providers(config, args, env_override)
+    # 库调用无 CLI 强制参数：传空覆盖对象，让 config/env 决定
+    providers = build_providers(
+        config, types.SimpleNamespace(model=None, endpoint=None, api_key=None), env_override
+    )
     max_pixel = int(env_or_config(config, "max_pixel", "MIMO_VISION_MAX_PIXEL", DEFAULT_MAX_PIXEL))
     content_parts = image_to_content_parts(
-        args.images, max_pixel=max_pixel, no_resize=args.no_resize
+        images, max_pixel=max_pixel, no_resize=no_resize
     )  # 编码一次，多 provider 复用
-    proxy = args.proxy or env_or_config(config, "proxy", "MIMO_VISION_PROXY")
+    eff_proxy = proxy or env_or_config(config, "proxy", "MIMO_VISION_PROXY")
 
     failures = []
     try:
         for p in providers:
-            payload = build_payload(content_parts, args.question, p["model"], max_tokens, temperature)
+            payload = build_payload(content_parts, question, p["model"], eff_max_tokens, eff_temperature)
             try:
-                data = send_request(payload, p["endpoint"], p["api_key"], timeout, proxy)
+                data = send_request(payload, p["endpoint"], p["api_key"], eff_timeout, eff_proxy)
             except VisionError as exc:
                 failures.append(f"{p['name']} ({p['model']}): {exc}")
                 continue
@@ -329,28 +343,42 @@ def main():
                     f"{p['name']} ({p['model']}): empty response (max_tokens 可能太小，只生成了思考过程)"
                 )
                 continue
+            return {"text": text, "provider": p["name"], "model": p["model"], "data": data}
 
-            # 成功：provider 信息走 stderr，不污染 stdout 文本
-            print(f"[via {p['name']} / {p['model']}]", file=sys.stderr)
-            if args.json:
-                out = dict(data)
-                out["provider"] = p["name"]
-                out["model"] = p["model"]
-                print(json.dumps(out, ensure_ascii=False, indent=2))
-            else:
-                print(text)
-            return
-
-        print("[mimo-vision] all providers failed:", file=sys.stderr)
-        for f in failures:
-            print(f"  - {f}", file=sys.stderr)
-        sys.exit(1)
+        detail = "; ".join(failures) if failures else "no providers configured"
+        raise VisionError(f"all providers failed: {detail}")
     finally:
         for tmp in _TMP_FILES:
             try:
                 os.unlink(tmp)
             except OSError:
                 pass
+
+
+def main():
+    args = parse_args()
+    try:
+        result = analyze(
+            args.images, args.question,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            timeout=args.timeout,
+            proxy=args.proxy,
+            no_resize=args.no_resize,
+        )
+    except VisionError as exc:
+        print(f"[mimo-vision] {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # 成功：provider 信息走 stderr，不污染 stdout 文本
+    print(f"[via {result['provider']} / {result['model']}]", file=sys.stderr)
+    if args.json:
+        out = dict(result["data"])
+        out["provider"] = result["provider"]
+        out["model"] = result["model"]
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    else:
+        print(result["text"])
 
 
 if __name__ == "__main__":

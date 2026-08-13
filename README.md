@@ -17,9 +17,47 @@ deepseek-vision-skill/
 ├── SKILL.md          # 技能触发与使用说明
 ├── config.json       # provider 路由配置（不含任何密钥）
 ├── scripts/
-│   └── vision.py     # 核心脚本（自动路由 + 视觉调用）
+│   └── vision.py     # 核心脚本（自动路由 + 视觉调用，含 analyze() 库接口）
+├── mcp/              # MCP server（把视觉管线暴露为 typed tools）
+│   ├── server.py     # FastMCP server：mimo_vision_analyze / ocr / providers
+│   ├── test_client.py
+│   └── pyproject.toml
 └── references/
     └── api.md        # API 说明与排错
+```
+
+## MCP Server（可选）
+
+把视觉识别作为 MCP 工具暴露给任意 AI 编程工具（Claude Code / opencode / Cursor 等），直接工具调用即可看图，无需走技能指令流。
+
+```bash
+cd mcp
+uv sync          # 安装 fastmcp + pillow
+uv run python server.py        # 启动 server（stdio 协议）
+uv run python test_client.py   # 端到端测试
+```
+
+注册 3 个工具：
+
+| 工具 | 功能 |
+|---|---|
+| `mimo_vision_analyze` | 分析图片（描述 / 问答 / 多图对比），自动故障转移 |
+| `mimo_vision_ocr` | 逐行提取图片中的全部文字（纯 OCR） |
+| `mimo_vision_providers` | 查看当前配置的视觉服务优先级与凭据状态 |
+
+MCP server 直接复用 `scripts/vision.py` 的 `analyze()` 库接口（单一事实来源），不派生子进程，长任务在线程中执行不阻塞事件循环。图片长边 >1536px 自动压缩。
+
+配置示例（opencode / Claude Code 的 MCP 配置）：
+
+```json
+{
+  "mcpServers": {
+    "mimo-vision": {
+      "command": "uv",
+      "args": ["run", "--project", "绝对路径/mimo-vision/mcp", "python", "server.py"]
+    }
+  }
+}
 ```
 
 ## 使用
